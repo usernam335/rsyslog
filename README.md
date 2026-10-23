@@ -23,11 +23,11 @@
 
 ## Поднимаем две машины — web и log.
 
-1. Переходим в каталог с Vagrantfile и запускаем его
+1. Переходим в каталог с [Vagrantfile](https://github.com/usernam335/rsyslog/blob/main/rsyslog/Vagrantfile) и запускаем его.
 
        cd /path/to/rsyslog
 ____________________________________________
        vagrant up
 
-2. Для настройки я выбрал rsyslog. Все настройки прописаны в [ansible-playbook]()
+2. Для настройки я выбрал rsyslog. Все настройки прописаны в [ansible-playbook](https://github.com/usernam335/rsyslog/blob/main/rsyslog/ansible-playbook.yml). Playbook запускается из Vagrantfile.
 
