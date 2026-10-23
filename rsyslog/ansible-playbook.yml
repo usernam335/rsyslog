@@ -1,0 +1,47 @@
+---
+- name: Настройка сервера сбора логов (log)
+  hosts: log
+  become: true
+  tasks:
+    - name: Раскомментировать модуль imudp и порт в rsyslog.conf
+      ansible.builtin.replace:
+        path: /etc/rsyslog.conf
+        regexp: '^#\s*(module\(load="(imudp|imtcp)"\)|input\(type="(imudp|imtcp)" port="514"\))'
+        replace: '\1'
+      notify: reload rsyslog
+
+    - name: Добавить шаблон удаленных логов в конец конфигурации
+      ansible.builtin.blockinfile:
+        path: /etc/rsyslog.conf
+        insertafter: EOF
+        block: |
+          #Add remote logs
+          $template RemoteLogs,"/var/log/rsyslog/%HOSTNAME%/%PROGRAMNAME%.log"
+          *.* ?RemoteLogs
+          & ~
+      notify: reload rsyslog
+
+  handlers:
+    - name: reload rsyslog
+      ansible.builtin.service:
+        name: rsyslog
+        state: restarted
+
+- name: Настройка отправки логов на веб-сервере (web)
+  hosts: web
+  become: true
+  tasks:
+    - name: Настроить отправку логов Nginx на удаленный сервер
+      ansible.builtin.blockinfile:
+        path: /etc/nginx/nginx.conf
+        insertafter: 'http {'
+        block: |
+          error_log syslog:server=192.168.56.15:514,tag=nginx_error;
+          access_log syslog:server=192.168.56.15:514,tag=nginx_access;
+      notify: reload nginx
+
+  handlers:
+    - name: reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
