@@ -31,3 +31,6 @@ ____________________________________________
 
 2. Для настройки я выбрал rsyslog. Все настройки прописаны в [ansible-playbook](https://github.com/usernam335/rsyslog/blob/main/rsyslog/ansible-playbook.yml). Playbook запускается из Vagrantfile.
 
+<img width="1908" height="355" alt="Снимок экрана от 2026-10-24 12-01-57" src="https://github.com/user-attachments/assets/34be2961-5dc8-406c-bf19-634ccd8d5e68" />
+
+
