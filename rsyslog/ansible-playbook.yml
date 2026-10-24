@@ -1,0 +1,105 @@
+---
+- name: Настройка сервера сбора логов (log)
+  hosts: log
+  become: true
+  tasks:
+    - name: Раскомментировать модуль imudp, imtcp и порт в rsyslog.conf
+      ansible.builtin.replace:
+        path: /etc/rsyslog.conf
+        regexp: '^#\s*(module\(load="(imudp|imtcp)"\)|input\(type="(imudp|imtcp)" port="514"\))'
+        replace: '\1'
+      notify: reload rsyslog
+
+    - name: Добавить шаблон удаленных логов в конец конфигурации
+      ansible.builtin.blockinfile:
+        path: /etc/rsyslog.conf
+        insertafter: EOF
+        block: |
+          #Add remote logs
+          $template RemoteLogs,"/var/log/rsyslog/%HOSTNAME%/%PROGRAMNAME%.log"
+          *.* ?RemoteLogs
+          & ~
+      notify: reload rsyslog
+
+  handlers:
+    - name: reload rsyslog
+      ansible.builtin.service:
+        name: rsyslog
+        state: restarted
+
+- name: Настройка отправки логов на web
+  hosts: web
+  become: true
+  tasks:
+    - name: Установка аудита
+      ansible.builtin.package:
+        name:
+          - auditd
+          - audispd-plugins
+        state: present
+
+    - name: Добавление правила аудита для Nginx
+      ansible.builtin.lineinfile:
+        path: /etc/audit/rules.d/nginx.rules
+        line: "-w /etc/nginx/ -p wa -k nginx_configs"
+        create: true
+        mode: '0640'
+      notify: restart auditd
+
+    - name: Включение пересылки логов аудита в syslog
+      ansible.builtin.lineinfile:
+        path: "{{ item }}"
+        regexp: '^active\s*=\s*'
+        line: "active = yes"
+      loop:
+        - /etc/audit/plugins.d/syslog.conf
+        - /etc/audisp/plugins.d/syslog.conf
+      failed_when: false
+      notify: restart auditd
+
+    - name: Конфигурация локального rsyslog для фильтрации Nginx и Аудита
+      ansible.builtin.copy:
+        dest: /etc/rsyslog.d/20-nginx-audit.conf
+        mode: '0644'
+        content: |
+          *.* @@192.168.56.15:514
+
+          if $syslogfacility-text == 'local6' then stop
+
+          if $syslogfacility-text == 'local7' then {
+              if $syslogseverity <= 2 then {
+                  action(type="omfile" file="/var/log/nginx/local_critical_error.log")
+              }
+              stop
+          }
+
+          if $programname == 'audispd' or $programname == 'audit' or $programname == 'auditd' then {
+              action(type="omfile" file="/var/log/audit/nginx_audit_local.log")
+          }
+      notify: reload rsyslog
+
+    - name: Настроить отправку логов Nginx на удаленный сервер
+      ansible.builtin.blockinfile:
+        path: /etc/nginx/nginx.conf
+        insertafter: 'http {'
+        block: |
+          error_log syslog:server=192.168.56.15:514,tag=nginx_error;
+          access_log syslog:server=192.168.56.15:514,tag=nginx_access;
+      notify: reload nginx
+
+  handlers:
+    - name: reload rsyslog
+      ansible.builtin.service:
+        name: rsyslog
+        state: restarted
+
+    - name: restart auditd
+      ansible.builtin.service:
+        name: auditd
+        state: restarted
+      failed_when: false
+
+    - name: reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: restarted
